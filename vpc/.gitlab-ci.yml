@@ -1,0 +1,7 @@
+terraform init -backend-config=dev-backend.tfvars -reconfigure
+terraform workspace list
+terraform workspace create dev
+terraform workspace select dev
+
+ terraform plan -var-file=dev.tfvars -out=dev-tfplan  
+ terraform apply dev-tfplan

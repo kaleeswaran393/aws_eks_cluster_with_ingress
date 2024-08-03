@@ -1,0 +1,196 @@
+include:
+  - project: "innersource/sgts/ship-hats/ship-hats-templates"
+    ref: "main"
+    file:
+      - "/templates/.gitlab-ci-aws.yml"
+      - "/templates/.gitlab-ci-checkov-scan.yml"
+#  - template: Jobs/SAST-IaC.gitlab-ci.yml
+
+stages:
+  - build # compliance
+  - static-test # compliance
+  - runtime-test # compliance
+  - sign # compliance
+  - deploy-to-prod # compliance
+  - terraform plan
+  - checkov scan
+  - terraform apply
+
+variables:
+  CONTAINER_SCANNING_DISABLED: "true"
+
+iac-sast:
+  stage: .pre
+
+.terraform_template:
+  extends:
+    - .invoke-awscli-commands-with-assumerole
+  image: registry.${CI_SERVER_HOST}/wog/gvt/ship/ship-2/ship2-infra/common/docker:latest
+  variables:
+    ROLE_ARN: ${OPEN_ID_ROLE_ARN}
+  before_script:
+    - echo $READ_TOKEN > ~/.terraformrc 
+    - .invoke-awscli-commands-with-assumerole, before_script
+    - LOCATION=$(echo ${CI_JOB_NAME} | cut -d":" -f3)
+    - cd terraform/${LOCATION}
+    - pwd
+    - terraform init -backend-config="$environment_var"-backend.tfvars -reconfigure
+    - terraform workspace select "$environment_var"
+    - terraform output -json
+
+  after_script:
+    - .invoke-awscli-commands-with-assumerole, after_script
+    - rm ~/.terraformrc
+
+.terraform_plan_template:
+  stage: terraform plan
+  extends: .terraform_template
+  script:
+    - pwd
+    - terraform plan -var-file="$environment_var".tfvars -out="$environment_var"-tfplan
+    - terraform show -json $environment_var-tfplan | jq '.' > $environment_var-tfplan.json
+
+.terraform_apply_template:
+  stage: terraform apply
+  extends: .terraform_template
+  script:
+    - pwd
+    - terraform apply "$environment_var"-tfplan
+
+.checkov-scan-template:
+  extends: .checkov-scan
+  stage: checkov scan
+  variables:
+    OPTS: "-f $environment_var-tfplan.json --check $CHECKOV_IDS"
+  before_script:
+    - LOCATION=$(echo ${CI_JOB_NAME} | cut -d":" -f3)
+    - cd terraform/${LOCATION}
+    - pwd
+    - |
+      CHECK=`echo $OPTS | awk -F"--check" '{print $2}' | awk -F" " '{print $1}'`
+      SKIP_CHECK=`echo $OPTS | awk -F"--skip-check" '{print $2}' | awk -F" " '{print $1}'`
+      if [ ! -z $SKIP_CHECK ]
+      then
+        CHECKOV_IDS=$(echo $CHECK | sed "s/$SKIP_CHECK//g")
+      fi
+      OPTS="-f $environment_var-tfplan.json --check $CHECKOV_IDS"
+  after_script:
+    - LOCATION=$(echo ${CI_JOB_NAME} | cut -d":" -f3)
+    - cp terraform/${LOCATION}/checkov_results.xml /tmp/$CI_PROJECT_PATH
+  allow_failure: false
+
+##################### isolated-vpc folder ###########################
+
+uat2:terraform-pre-plan:isolated-vpc:
+  extends: .terraform_plan_template
+  variables:
+    environment_var: uat2
+    OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
+  environment: uat2
+  artifacts:
+    paths:
+    - terraform/isolated-vpc/uat2-tfplan*
+    expire_in: 20 minutes
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "master"'
+      changes:
+        paths:
+          - terraform/isolated-vpc/*
+        compare_to: 'refs/heads/master'
+      allow_failure: true
+
+uat2:terraform-plan:isolated-vpc:
+  extends: .terraform_plan_template
+  variables:
+    environment_var: uat2
+    OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
+  environment: uat2
+  artifacts:
+    paths:
+    - terraform/isolated-vpc/uat2-tfplan*
+    expire_in: 20 minutes
+  only:
+    refs:
+      - merge_requests
+    changes:
+      - terraform/isolated-vpc/*
+
+uat2:terraform-plan:isolated-vpc:checkov-scan:
+  extends: .checkov-scan-template
+  variables:
+    environment_var: uat2
+    OPTS: "-f $environment_var-tfplan.json --check $CHECKOV_IDS --skip-check CKV2_AWS_11,CKV2_AWS_12"
+  needs:
+  - job: uat2:terraform-plan:isolated-vpc
+    artifacts: true
+  only:
+    refs:
+      - merge_requests
+    changes:
+      - terraform/isolated-vpc/*
+
+uat2:terraform-apply:isolated-vpc:
+  extends: .terraform_apply_template
+  variables:
+    environment_var: uat2
+    OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
+  environment: uat2
+  needs:
+  - job: uat2:terraform-plan:isolated-vpc
+    artifacts: true
+  - job: uat2:terraform-plan:isolated-vpc:checkov-scan
+  when: manual
+  only:
+    refs:
+      - merge_requests
+    changes:
+      - terraform/isolated-vpc/*
+
+
+
+prod2:terraform-plan:isolated-vpc:
+  extends: .terraform_plan_template
+  variables:
+    environment_var: prod2
+    OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
+  environment: prod2
+  artifacts:
+    paths:
+    - terraform/isolated-vpc/prod2-tfplan*
+    expire_in: 20 minutes
+  only:
+    refs:
+      - master
+    changes:
+      - terraform/isolated-vpc/*
+
+prod2:terraform-plan:isolated-vpc:checkov-scan:
+  extends: .checkov-scan-template
+  variables:
+    environment_var: prod2
+    OPTS: "-f $environment_var-tfplan.json --check $CHECKOV_IDS --skip-check CKV2_AWS_11,CKV2_AWS_12"
+  needs:
+  - job: prod2:terraform-plan:isolated-vpc
+    artifacts: true
+  only:
+    refs:
+      - master
+    changes:
+      - terraform/isolated-vpc/*
+
+prod2:terraform-apply:isolated-vpc:
+  extends: .terraform_apply_template
+  variables:
+    environment_var: prod2
+    OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
+  environment: prod2
+  needs:
+  - job: prod2:terraform-plan:isolated-vpc
+    artifacts: true
+  - job: prod2:terraform-plan:isolated-vpc:checkov-scan
+  when: manual
+  only:
+    refs:
+      - master
+    changes:
+      - terraform/isolated-vpc/*
