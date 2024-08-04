@@ -8,8 +8,6 @@ const client = redis.createClient({
 });
 client.set('visits', 0);
 
-connect('localhost', 5098);
-
 app.get('/', (req, res) => {
   client.get('visits', (err, visits) => {
     res.send('Number of visits is ' + visits);
