@@ -1,26 +1,97 @@
+#image: alpine:latest
+stages:
+  - build
+# variables:
+#   GIT_STRATEGY: clone
+# build-job: 
+#   stage: build
+#   tags:
+#     - ship_docker
+#   variables:
+#     IMAGE_NAME: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+#   script:
+#     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+#     - echo $IMAGE_NAME
+#     - docker build -t $IMAGE_NAME web/Dockerfile
+#     - docker push $IMAGE_NAME
 include:
-  - project: "innersource/sgts/ship-hats/ship-hats-templates"
+  #- project: "innersource/sgts/ship-hats/ship-hats-templates"
     ref: "main"
     file:
-      - "/templates/.gitlab-ci-aws.yml"
-      - "/templates/.gitlab-ci-checkov-scan.yml"
-#  - template: Jobs/SAST-IaC.gitlab-ci.yml
+      - /templates/.gitlab-ci-aquasec-trivy-scan.yml
+     # - /templates/.gitlab-ci-slsa-common.yml
+      - /templates/vars/.gitlab-ci-pipeline-coe-vars.yml
+      - /templates/vars/.gitlab-ci-sonatype-vars.yml
+      - /templates/.gitlab-ci-aws.yml
+     # - /templates/.gitlab-ci-docker-delete.yml
+      - /templates/.gitlab-ci-docker-build.yml
+      #- /templates/.gitlab-ci-docker-copy.yml
+      - /templates/.gitlab-ci-checkov-scan.yml
 
 stages:
-  - build # compliance
-  - static-test # compliance
-  - runtime-test # compliance
-  - sign # compliance
-  - deploy-to-prod # compliance
-  - terraform plan
-  - checkov scan
-  - terraform apply
+  - build
+  - scan
+  - sign
+  - verify
+  - deploy
 
 variables:
-  CONTAINER_SCANNING_DISABLED: "true"
+  WORKING_DIR: ./
+  DOCKER_REGISTRY: $CI_REGISTRY_IMAGE
+  IMAGE_NAME: node-image
+  IMAGE_VERSION: $CI_COMMIT_SHORT_SHA
+  DOCKER_USER: $CI_REGISTRY_USER
+  DOCKER_PASSWORD: $CI_REGISTRY_PASSWORD
+  DOCKER_TARGET_IMAGE: $IMAGE_NAME:$IMAGE_VERSION
+  SBOM_FILE: trivy.cdx.json
+  # variables required in SHIP-HATS Templates .gitlab-ci.yml for this example:
+  COSIGN_KEY: ""  # To use COSIGN_PASSWORD
+  COSIGN_PUB: ""  # To use COSIGN_PASSWORD
+  # COSIGN_PASSWORD  # This variable is set in CICD variables
 
-iac-sast:
-  stage: .pre
+### web-npm ####
+build-image:
+  stage: build
+  extends:
+    - .build-and-push-docker-image
+    - .generate-gitlab-attestation
+  variables:
+    DOCKER_TARGET_REGISTRY: $DOCKER_REGISTRY
+  before_script:
+    - cd /web-npm
+
+trivy-scan:
+  stage: scan
+  extends:
+    - .trivy-scan
+  variables:
+    SCAN_TARGET: $DOCKER_REGISTRY/$DOCKER_TARGET_IMAGE
+    REPORT_LEVELS: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+    FAIL_LEVELS: CRITICAL
+    TRIVY_USERNAME: $DOCKER_USER
+    TRIVY_PASSWORD: $DOCKER_PASSWORD
+    TRIVY_SBOM_FILE: $SBOM_FILE
+
+docker-push-to-aws-ecr-job:
+  stage: deploy
+  extends:
+    - .invoke-ecr-token-retrieval
+    - .copy-docker-image-from-one-remote-registry-to-another
+  image: $PIPELINE_COE_REGISTRY/ecr-container:latest
+  variables:
+    SRC_USER: $DOCKER_USER
+    SRC_PASSWORD: $DOCKER_PASSWORD
+    DEST_USER: "AWS"
+    SRC_IMAGE: $DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_VERSION
+    DEST_IMAGE: $AWS_ECR_URL/result:$IMAGE_VERSION
+  before_script:
+    - .invoke-ecr-token-retrieval, before_script
+    - OPTS="--remove-signatures --src-creds $SRC_USER:$SRC_PASSWORD --dest-creds $DEST_USER:$ECR_TOKEN --digestfile $CI_PROJECT_DIR/digest"
+  artifacts:
+    paths:
+      - $CI_PROJECT_DIR/digest
+    expire_in: 1 week
+
 
 .terraform_template:
   extends:
@@ -79,76 +150,75 @@ iac-sast:
     - cp terraform/${LOCATION}/checkov_results.xml /tmp/$CI_PROJECT_PATH
   allow_failure: false
 
-##################### isolated-vpc folder ###########################
 
-uat2:terraform-pre-plan:isolated-vpc:
+##################### vpc folder ###########################
+
+dev:terraform-pre-plan:vpc:
   extends: .terraform_plan_template
   variables:
-    environment_var: uat2
+    environment_var: dev
     OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
-  environment: uat2
+  environment: dev
   artifacts:
     paths:
-    - terraform/isolated-vpc/uat2-tfplan*
+    - terraform/vpc/dev-tfplan*
     expire_in: 20 minutes
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "master"'
       changes:
         paths:
-          - terraform/isolated-vpc/*
+          - terraform/vpc/*
         compare_to: 'refs/heads/master'
       allow_failure: true
 
-uat2:terraform-plan:isolated-vpc:
+dev:terraform-plan:vpc:
   extends: .terraform_plan_template
   variables:
-    environment_var: uat2
+    environment_var: dev
     OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
-  environment: uat2
+  environment: dev
   artifacts:
     paths:
-    - terraform/isolated-vpc/uat2-tfplan*
+    - terraform/vpc/dev-tfplan*
     expire_in: 20 minutes
   only:
     refs:
       - merge_requests
     changes:
-      - terraform/isolated-vpc/*
+      - terraform/vpc/*
 
-uat2:terraform-plan:isolated-vpc:checkov-scan:
+dev:terraform-plan:vpc:checkov-scan:
   extends: .checkov-scan-template
   variables:
-    environment_var: uat2
+    environment_var: dev
     OPTS: "-f $environment_var-tfplan.json --check $CHECKOV_IDS --skip-check CKV2_AWS_11,CKV2_AWS_12"
   needs:
-  - job: uat2:terraform-plan:isolated-vpc
+  - job: dev:terraform-plan:vpc
     artifacts: true
   only:
     refs:
       - merge_requests
     changes:
-      - terraform/isolated-vpc/*
+      - terraform/vpc/*
 
-uat2:terraform-apply:isolated-vpc:
+dev:terraform-apply:vpc:
   extends: .terraform_apply_template
   variables:
-    environment_var: uat2
+    environment_var: dev
     OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
-  environment: uat2
+  environment: dev
   needs:
-  - job: uat2:terraform-plan:isolated-vpc
+  - job: dev:terraform-plan:vpc
     artifacts: true
-  - job: uat2:terraform-plan:isolated-vpc:checkov-scan
+  - job: dev:terraform-plan:vpc:checkov-scan
   when: manual
   only:
     refs:
       - merge_requests
     changes:
-      - terraform/isolated-vpc/*
+      - terraform/vpc/*
 
-
-
-prod2:terraform-plan:isolated-vpc:
+prod2:terraform-plan:vpc:
   extends: .terraform_plan_template
   variables:
     environment_var: prod2
@@ -156,41 +226,173 @@ prod2:terraform-plan:isolated-vpc:
   environment: prod2
   artifacts:
     paths:
-    - terraform/isolated-vpc/prod2-tfplan*
+    - terraform/vpc/prod2-tfplan*
     expire_in: 20 minutes
   only:
     refs:
       - master
     changes:
-      - terraform/isolated-vpc/*
+      - terraform/vpc/*
 
-prod2:terraform-plan:isolated-vpc:checkov-scan:
+prod2:terraform-plan:vpc:checkov-scan:
   extends: .checkov-scan-template
   variables:
     environment_var: prod2
     OPTS: "-f $environment_var-tfplan.json --check $CHECKOV_IDS --skip-check CKV2_AWS_11,CKV2_AWS_12"
   needs:
-  - job: prod2:terraform-plan:isolated-vpc
+  - job: prod2:terraform-plan:vpc
     artifacts: true
   only:
     refs:
       - master
     changes:
-      - terraform/isolated-vpc/*
+      - terraform/vpc/*
 
-prod2:terraform-apply:isolated-vpc:
+prod2:terraform-apply:vpc:
   extends: .terraform_apply_template
   variables:
     environment_var: prod2
     OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
   environment: prod2
   needs:
-  - job: prod2:terraform-plan:isolated-vpc
+  - job: prod2:terraform-plan:vpc
     artifacts: true
-  - job: prod2:terraform-plan:isolated-vpc:checkov-scan
+  - job: prod2:terraform-plan:vpc:checkov-scan
   when: manual
   only:
     refs:
       - master
     changes:
-      - terraform/isolated-vpc/*
+      - terraform/vpc/*
+
+#----eks-cluster
+dev:terraform-pre-plan:eks-cluster:
+  extends: .terraform_plan_template
+  variables:
+    environment_var: dev
+    OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
+  environment: dev
+  artifacts:
+    paths:
+    - terraform/eks-cluster/dev-tfplan*
+    expire_in: 20 minutes
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "master"'
+      changes:
+        paths:
+          - terraform/eks-cluster/*
+        compare_to: 'refs/heads/master'
+      allow_failure: true
+
+dev:terraform-plan:eks-cluster:
+  extends: .terraform_plan_template
+  variables:
+    environment_var: dev
+    OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
+  environment: dev
+  artifacts:
+    paths:
+    - terraform/eks-cluster/dev-tfplan*
+    expire_in: 20 minutes
+  only:
+    refs:
+      - merge_requests
+    changes:
+      - terraform/eks-cluster/*
+
+dev:terraform-plan:eks-cluster:checkov-scan:
+  extends: .checkov-scan-template
+  variables:
+    environment_var: dev
+    OPTS: "-f $environment_var-tfplan.json --check $CHECKOV_IDS --skip-check CKV2_AWS_11,CKV2_AWS_12"
+  needs:
+  - job: dev:terraform-plan:eks-cluster
+    artifacts: true
+  only:
+    refs:
+      - merge_requests
+    changes:
+      - terraform/eks-cluster/*
+
+dev:terraform-apply:eks-cluster:
+  extends: .terraform_apply_template
+  variables:
+    environment_var: dev
+    OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
+  environment: dev
+  needs:
+  - job: dev:terraform-plan:eks-cluster
+    artifacts: true
+  - job: dev:terraform-plan:eks-cluster:checkov-scan
+  when: manual
+  only:
+    refs:
+      - merge_requests
+    changes:
+      - terraform/eks-cluster/*
+
+# #----redis-elasticcache
+# dev:terraform-pre-plan:redis-elasticcache:
+#   extends: .terraform_plan_template
+#   variables:
+#     environment_var: dev
+#     OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
+#   environment: dev
+#   artifacts:
+#     paths:
+#     - terraform/redis-elasticcache/dev-tfplan*
+#     expire_in: 20 minutes
+#   rules:
+#     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "master"'
+#       changes:
+#         paths:
+#           - terraform/redis-elasticcache/*
+#         compare_to: 'refs/heads/master'
+#       allow_failure: true
+
+# dev:terraform-plan:redis-elasticcache:
+#   extends: .terraform_plan_template
+#   variables:
+#     environment_var: dev
+#     OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
+#   environment: dev
+#   artifacts:
+#     paths:
+#     - terraform/redis-elasticcache/dev-tfplan*
+#     expire_in: 20 minutes
+#   only:
+#     refs:
+#       - merge_requests
+#     changes:
+#       - terraform/redis-elasticcache/*
+
+# dev:terraform-plan:redis-elasticcache:checkov-scan:
+#   extends: .checkov-scan-template
+#   variables:
+#     environment_var: dev
+#     OPTS: "-f $environment_var-tfplan.json --check $CHECKOV_IDS --skip-check CKV2_AWS_11,CKV2_AWS_12"
+#   needs:
+#   - job: dev:terraform-plan:redis-elasticcache
+#     artifacts: true
+#   only:
+#     refs:
+#       - merge_requests
+#     changes:
+#       - terraform/redis-elasticcache/*
+
+# dev:terraform-apply:redis-elasticcache:
+#   extends: .terraform_apply_template
+#   variables:
+#     environment_var: dev
+#     OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
+#   environment: dev
+#   needs:
+#   - job: dev:terraform-plan:redis-elasticcache
+#     artifacts: true
+#   - job: dev:terraform-plan:redis-elasticcache:checkov-scan
+#   when: manual
+#   only:
+#     refs:
+#       - merge_requests
+#     changes:
+#       - terraform/redis-elasticcache/*
