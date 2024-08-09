@@ -1,5 +1,45 @@
 locals {
   cluster_name = "dev-eks-test"
+  CA_CERTIFICATE_DIRECTORY="/etc/kubernetes/pki"
+  CA_CERTIFICATE_FILE_PATH="${local.CA_CERTIFICATE_DIRECTORY}/ca.crt"
+ 
+}
+resource "aws_security_group" "eks-sg" {
+    name        = "${var.environment} eks cluster"
+    description = "Allow traffic"
+    vpc_id      = var.vpc_id
+
+    ingress {
+      description      = "World"
+      from_port        = 0
+      to_port          = 0
+      protocol         = "-1"
+      cidr_blocks      = ["0.0.0.0/0"]
+      ipv6_cidr_blocks = ["::/0"]
+    }
+
+    egress {
+      from_port        = 0
+      to_port          = 0
+      protocol         = "-1"
+      cidr_blocks      = ["0.0.0.0/0"]
+      ipv6_cidr_blocks = ["::/0"]
+    }
+
+    tags = merge({
+      Name = "EKS ${var.environment}",
+      "kubernetes.io/cluster/${local.cluster_name}": "owned"
+    })
+  }
+
+  provider "kubernetes" {
+  host                   = module.eks.cluster_endpoint
+  #cluster_ca_certificate = base64decode(local.CA_CERTIFICATE_FILE_PATH)
+  exec {
+    api_version = "client.authentication.k8s.io/v1"
+    args        = ["eks", "get-token", "--cluster-name", local.cluster_name]
+    command     = "aws"
+  }
 }
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
@@ -22,6 +62,8 @@ module "eks" {
 
   eks_managed_node_group_defaults = {
     ami_type = "AL2_x86_64"
+    vpc_security_group_ids = [aws_security_group.eks-sg.id]
+    disk_size              = 50
 
   }
 
@@ -64,3 +106,84 @@ module "irsa-ebs-csi" {
   role_policy_arns              = [data.aws_iam_policy.ebs_csi_policy.arn]
   oidc_fully_qualified_subjects = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
 }
+
+# module "lb_role" {
+#   source    = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+
+#   role_name = "${var.environment}_eks_lb"
+#   attach_load_balancer_controller_policy = true
+
+#   oidc_providers = {
+#     main = {
+#       provider_arn               = module.eks.oidc_provider_arn
+#       namespace_service_accounts = ["kube-system:aws-load-balancer-controller"]
+#     }
+#   }
+# }
+
+provider "helm" {
+  kubernetes {
+    host                   = module.eks.cluster_endpoint
+    cluster_ca_certificate = base64decode(local.CA_CERTIFICATE_FILE_PATH)
+    exec {
+      api_version = "client.authentication.k8s.io/v1"
+      args        = ["eks", "get-token", "--cluster-name", local.cluster_name]
+      command     = "aws"
+    }
+  }
+}
+
+# resource "kubernetes_service_account" "service-account" {
+#   metadata {
+#     name = "aws-load-balancer-controller"
+#     namespace = "kube-system"
+#     labels = {
+#         "app.kubernetes.io/name"= "aws-load-balancer-controller"
+#         "app.kubernetes.io/component"= "controller"
+#     }
+#     annotations = {
+#       "eks.amazonaws.com/role-arn" = module.lb_role.iam_role_arn
+#       "eks.amazonaws.com/sts-regional-endpoints" = "true"
+#     }
+#   }
+# }
+
+# resource "helm_release" "lb" {
+#   name       = "aws-load-balancer-controller"
+#   repository = "https://aws.github.io/eks-charts"
+#   chart      = "aws-load-balancer-controller"
+#   namespace  = "kube-system"
+#   depends_on = [
+#     kubernetes_service_account.service-account
+#   ]
+
+#   set {
+#     name  = "region"
+#     value = "ap-southeast-1"
+#   }
+
+#   set {
+#     name  = "vpcId"
+#     value = var.vpc_id
+#   }
+
+#   set {
+#     name  = "image.repository"
+#     value = "602401143452.dkr.ecr.ap-southeast-1.amazonaws.com"
+#   }
+
+#   set {
+#     name  = "serviceAccount.create"
+#     value = "false"
+#   }
+
+#   set {
+#     name  = "clusterName"
+#     value = var.eks_name
+#   }
+# }
+
+
+# resource "aws_ecr_repository" "vasuki-dev-test" {
+#   name = "vasuki-dev-test"
+# }

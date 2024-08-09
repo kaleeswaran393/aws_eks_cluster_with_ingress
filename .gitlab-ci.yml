@@ -1,32 +1,13 @@
-#image: alpine:latest
-stages:
-  - build
-# variables:
-#   GIT_STRATEGY: clone
-# build-job: 
-#   stage: build
-#   tags:
-#     - ship_docker
-#   variables:
-#     IMAGE_NAME: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
-#   script:
-#     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-#     - echo $IMAGE_NAME
-#     - docker build -t $IMAGE_NAME web/Dockerfile
-#     - docker push $IMAGE_NAME
 include:
-  #- project: "innersource/sgts/ship-hats/ship-hats-templates"
+  - project: "innersource/sgts/ship-hats/ship-hats-templates"
     ref: "main"
     file:
       - /templates/.gitlab-ci-aquasec-trivy-scan.yml
-     # - /templates/.gitlab-ci-slsa-common.yml
       - /templates/vars/.gitlab-ci-pipeline-coe-vars.yml
-      - /templates/vars/.gitlab-ci-sonatype-vars.yml
       - /templates/.gitlab-ci-aws.yml
-     # - /templates/.gitlab-ci-docker-delete.yml
       - /templates/.gitlab-ci-docker-build.yml
-      #- /templates/.gitlab-ci-docker-copy.yml
       - /templates/.gitlab-ci-checkov-scan.yml
+  - template: Jobs/SAST-IaC.gitlab-ci.yml
 
 stages:
   - build
@@ -36,7 +17,7 @@ stages:
   - deploy
 
 variables:
-  WORKING_DIR: ./
+  WORKING_DIR: .
   DOCKER_REGISTRY: $CI_REGISTRY_IMAGE
   IMAGE_NAME: node-image
   IMAGE_VERSION: $CI_COMMIT_SHORT_SHA
@@ -49,16 +30,19 @@ variables:
   COSIGN_PUB: ""  # To use COSIGN_PASSWORD
   # COSIGN_PASSWORD  # This variable is set in CICD variables
 
+iac-sast:
+  stage: .pre
+
+
 ### web-npm ####
 build-image:
   stage: build
   extends:
     - .build-and-push-docker-image
-    - .generate-gitlab-attestation
   variables:
     DOCKER_TARGET_REGISTRY: $DOCKER_REGISTRY
   before_script:
-    - cd /web-npm
+    - cd web-npm
 
 trivy-scan:
   stage: scan
@@ -76,7 +60,6 @@ docker-push-to-aws-ecr-job:
   stage: deploy
   extends:
     - .invoke-ecr-token-retrieval
-    - .copy-docker-image-from-one-remote-registry-to-another
   image: $PIPELINE_COE_REGISTRY/ecr-container:latest
   variables:
     SRC_USER: $DOCKER_USER
@@ -91,6 +74,30 @@ docker-push-to-aws-ecr-job:
     paths:
       - $CI_PROJECT_DIR/digest
     expire_in: 1 week
+  script:
+    - echo "changes in docker file"
+
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "main"'
+      changes:
+        paths:
+          - web-npm/*
+        compare_to: 'refs/heads/main'
+      allow_failure: true
+
+
+deploy-k8s-service:
+  extends: .invoke-kubectlupdateconfig
+  stage: deploy
+  script:
+    - kubectl apply -f ./eks-cluster/k8s/deployment.yml
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "main"'
+      changes:
+        paths:
+          - /eks-cluster/k8s/*
+        compare_to: 'refs/heads/main'
+      allow_failure: true
 
 
 .terraform_template:
@@ -154,6 +161,7 @@ docker-push-to-aws-ecr-job:
 ##################### vpc folder ###########################
 
 dev:terraform-pre-plan:vpc:
+  stage: .pre
   extends: .terraform_plan_template
   variables:
     environment_var: dev
@@ -164,14 +172,15 @@ dev:terraform-pre-plan:vpc:
     - terraform/vpc/dev-tfplan*
     expire_in: 20 minutes
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "master"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "main"'
       changes:
         paths:
           - terraform/vpc/*
-        compare_to: 'refs/heads/master'
+        compare_to: 'refs/heads/main'
       allow_failure: true
 
 dev:terraform-plan:vpc:
+  stage: build
   extends: .terraform_plan_template
   variables:
     environment_var: dev
@@ -188,6 +197,7 @@ dev:terraform-plan:vpc:
       - terraform/vpc/*
 
 dev:terraform-plan:vpc:checkov-scan:
+  stage: scan
   extends: .checkov-scan-template
   variables:
     environment_var: dev
@@ -202,6 +212,7 @@ dev:terraform-plan:vpc:checkov-scan:
       - terraform/vpc/*
 
 dev:terraform-apply:vpc:
+  stage: deploy
   extends: .terraform_apply_template
   variables:
     environment_var: dev
@@ -218,55 +229,10 @@ dev:terraform-apply:vpc:
     changes:
       - terraform/vpc/*
 
-prod2:terraform-plan:vpc:
-  extends: .terraform_plan_template
-  variables:
-    environment_var: prod2
-    OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
-  environment: prod2
-  artifacts:
-    paths:
-    - terraform/vpc/prod2-tfplan*
-    expire_in: 20 minutes
-  only:
-    refs:
-      - master
-    changes:
-      - terraform/vpc/*
-
-prod2:terraform-plan:vpc:checkov-scan:
-  extends: .checkov-scan-template
-  variables:
-    environment_var: prod2
-    OPTS: "-f $environment_var-tfplan.json --check $CHECKOV_IDS --skip-check CKV2_AWS_11,CKV2_AWS_12"
-  needs:
-  - job: prod2:terraform-plan:vpc
-    artifacts: true
-  only:
-    refs:
-      - master
-    changes:
-      - terraform/vpc/*
-
-prod2:terraform-apply:vpc:
-  extends: .terraform_apply_template
-  variables:
-    environment_var: prod2
-    OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
-  environment: prod2
-  needs:
-  - job: prod2:terraform-plan:vpc
-    artifacts: true
-  - job: prod2:terraform-plan:vpc:checkov-scan
-  when: manual
-  only:
-    refs:
-      - master
-    changes:
-      - terraform/vpc/*
 
 #----eks-cluster
 dev:terraform-pre-plan:eks-cluster:
+  stage: .pre
   extends: .terraform_plan_template
   variables:
     environment_var: dev
@@ -277,14 +243,15 @@ dev:terraform-pre-plan:eks-cluster:
     - terraform/eks-cluster/dev-tfplan*
     expire_in: 20 minutes
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "master"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "main"'
       changes:
         paths:
           - terraform/eks-cluster/*
-        compare_to: 'refs/heads/master'
+        compare_to: 'refs/heads/main'
       allow_failure: true
 
 dev:terraform-plan:eks-cluster:
+  stage: build
   extends: .terraform_plan_template
   variables:
     environment_var: dev
@@ -301,6 +268,7 @@ dev:terraform-plan:eks-cluster:
       - terraform/eks-cluster/*
 
 dev:terraform-plan:eks-cluster:checkov-scan:
+  stage: scan
   extends: .checkov-scan-template
   variables:
     environment_var: dev
@@ -315,6 +283,7 @@ dev:terraform-plan:eks-cluster:checkov-scan:
       - terraform/eks-cluster/*
 
 dev:terraform-apply:eks-cluster:
+  stage: deploy
   extends: .terraform_apply_template
   variables:
     environment_var: dev
@@ -396,3 +365,4 @@ dev:terraform-apply:eks-cluster:
 #       - merge_requests
 #     changes:
 #       - terraform/redis-elasticcache/*
+
