@@ -68,3 +68,47 @@ When you run the `terraform plan` or ``` terraform apply commands make sure to r
 `terraform plan -var-file="prod.tfvars"`
 
 `terraform apply -var-file="prod.tfvars"`
+
+Template: .invoke-kubectlupdateconfig
+
+Prerequisites:
+Prior to using this template, you need to set up the identity provider using this tutorial: https://docs.gitlab.com/ee/ci/cloud_services/aws
+Steps Add the identity provider and Configure a role and trust are required.
+The configured role must have at least DescribeCluster iam permission towards the target cluster and have the required permissions in the eks's auth-config(https://docs.aws.amazon.com/eks/latest/userguide/add-user-role.html).
+
+Target user:
+This template allows users to invoke kubectl commands within the "script" key.  It performs assume role using an identity provider in the "before_script" key, initiates a command to create the kubeconfig file to be used by kubectl and flushes all access variables in the "after_script" key.
+
+Add on implementation should go in:
+
+script
+
+
+See example/s:
+
+Kubectl-Invoke: Sample usage code and Documentation
+
+Template: .invoke-ecr-token-retrieval
+
+Prerequisites:
+Prior to using this template, you need to set up the identity provider using this tutorial: https://docs.gitlab.com/ee/ci/cloud_services/aws
+Steps Add the identity provider and Configure a role and trust are required.
+
+Target user:
+This template allows users to retrieve an AWS ECR token in "before_script" key and flushes all access tokens in the "after_script" key.
+
+Add on implementation should go in:
+
+script
+
+
+CICD Settings/Variables to set:
+
+
+AWS_ECR_URL
+ROLE_ARN
+
+
+
+
+
