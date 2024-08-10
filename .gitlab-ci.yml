@@ -4,7 +4,8 @@ include:
   - local: '/templates/.gitlab-ci-aws.yml'
   - local: '/templates/.gitlab-ci-docker-build.yml'
   - local: '/templates/.gitlab-ci-checkov-scan.yml'
-  - template: Jobs/SAST-IaC.gitlab-ci.yml
+ # - template: Jobs/SAST-IaC.gitlab-ci.yml
+  - template: Terraform.latest.gitlab-ci.yml
 
 stages:
   - .pre
@@ -41,3 +42,21 @@ before_script:
     export AWS_SESSION_TOKEN="${STS[2]}"
 after_script:
   - unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+fmt:
+ extends: .terraform:fmt
+ needs: []
+
+validate:
+ extends: .terraform:validate
+ needs: []
+
+build:
+ extends: .terraform:build
+
+deploy:
+ extends: .terraform:deploy
+ dependencies:
+   - build
+ environment:
+   name: $TF_STATE_NAME
