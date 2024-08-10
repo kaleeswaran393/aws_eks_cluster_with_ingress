@@ -14,10 +14,10 @@ variables:
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: https://$CI_SERVER_HOST
-  tags:
-    - non_privileged
-    - no_root
-    - cstack
+  # tags:
+  #   - non_privileged
+  #   - no_root
+  #   - cstack
   before_script:
     - export VARIABLE_NAME=ROLE_ARN
     - !reference [.check-variable-sh, script]
@@ -41,10 +41,10 @@ variables:
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: https://$CI_SERVER_HOST
-  tags:
-    - non_privileged
-    - no_root
-    - cstack
+  # tags:
+  #   - non_privileged
+  #   - no_root
+  #   - cstack
   before_script:
     - export VARIABLE_NAME=SECRET_ID
     - !reference [.check-variable-sh, script]
@@ -74,10 +74,10 @@ variables:
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: https://$CI_SERVER_HOST
-  tags:
-    - non_privileged
-    - no_root
-    - cstack
+  # tags:
+  #   - non_privileged
+  #   - no_root
+  #   - cstack
   before_script:
     - export VARIABLE_NAME=AWS_ECR_URL
     - !reference [.check-variable-sh, script]
