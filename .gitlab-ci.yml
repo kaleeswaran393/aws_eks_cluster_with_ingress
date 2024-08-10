@@ -1,20 +1,21 @@
 include:
-  - project: "innersource/sgts/ship-hats/ship-hats-templates"
-    ref: "main"
     file:
       - /templates/.gitlab-ci-aquasec-trivy-scan.yml
       - /templates/vars/.gitlab-ci-pipeline-coe-vars.yml
       - /templates/.gitlab-ci-aws.yml
       - /templates/.gitlab-ci-docker-build.yml
       - /templates/.gitlab-ci-checkov-scan.yml
-  - template: Jobs/SAST-IaC.gitlab-ci.yml
+      - template: Jobs/SAST-IaC.gitlab-ci.yml
 
 stages:
+  - .pre
   - build
   - scan
-  - sign
-  - verify
   - deploy
+  - terraform plan
+  - checkov scan
+  - terraform apply
+
 
 variables:
   WORKING_DIR: .
@@ -25,80 +26,38 @@ variables:
   DOCKER_PASSWORD: $CI_REGISTRY_PASSWORD
   DOCKER_TARGET_IMAGE: $IMAGE_NAME:$IMAGE_VERSION
   SBOM_FILE: trivy.cdx.json
-  # variables required in SHIP-HATS Templates .gitlab-ci.yml for this example:
-  COSIGN_KEY: ""  # To use COSIGN_PASSWORD
-  COSIGN_PUB: ""  # To use COSIGN_PASSWORD
-  # COSIGN_PASSWORD  # This variable is set in CICD variables
 
 iac-sast:
   stage: .pre
 
-
-### web-npm ####
-build-image:
-  stage: build
-  extends:
-    - .build-and-push-docker-image
-  variables:
-    DOCKER_TARGET_REGISTRY: $DOCKER_REGISTRY
+.invoke-awscli-commands-with-assumerole:
+  image:
+    name: $NEXUSREPO_DOCKER_PROXY_HOSTNAME/amazon/aws-cli:latest
+    entrypoint:
+      - '/usr/bin/env'
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://$CI_SERVER_HOST
+  tags:
+    - non_privileged
+    - no_root
+    - cstack
   before_script:
-    - cd web-npm
-
-trivy-scan:
-  stage: scan
-  extends:
-    - .trivy-scan
-  variables:
-    SCAN_TARGET: $DOCKER_REGISTRY/$DOCKER_TARGET_IMAGE
-    REPORT_LEVELS: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
-    FAIL_LEVELS: CRITICAL
-    TRIVY_USERNAME: $DOCKER_USER
-    TRIVY_PASSWORD: $DOCKER_PASSWORD
-    TRIVY_SBOM_FILE: $SBOM_FILE
-
-docker-push-to-aws-ecr-job:
-  stage: deploy
-  extends:
-    - .invoke-ecr-token-retrieval
-  image: $PIPELINE_COE_REGISTRY/ecr-container:latest
-  variables:
-    SRC_USER: $DOCKER_USER
-    SRC_PASSWORD: $DOCKER_PASSWORD
-    DEST_USER: "AWS"
-    SRC_IMAGE: $DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_VERSION
-    DEST_IMAGE: $AWS_ECR_URL/result:$IMAGE_VERSION
-  before_script:
-    - .invoke-ecr-token-retrieval, before_script
-    - OPTS="--remove-signatures --src-creds $SRC_USER:$SRC_PASSWORD --dest-creds $DEST_USER:$ECR_TOKEN --digestfile $CI_PROJECT_DIR/digest"
-  artifacts:
-    paths:
-      - $CI_PROJECT_DIR/digest
-    expire_in: 1 week
-  script:
-    - echo "changes in docker file"
-
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "main"'
-      changes:
-        paths:
-          - web-npm/*
-        compare_to: 'refs/heads/main'
-      allow_failure: true
-
-
-deploy-k8s-service:
-  extends: .invoke-kubectlupdateconfig
-  stage: deploy
-  script:
-    - kubectl apply -f ./eks-cluster/k8s/deployment.yml
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "main"'
-      changes:
-        paths:
-          - /eks-cluster/k8s/*
-        compare_to: 'refs/heads/main'
-      allow_failure: true
-
+    - export VARIABLE_NAME=ROLE_ARN
+    - !reference [.check-variable-sh, script]
+    - |
+      STS=($(aws sts assume-role-with-web-identity \
+      --role-arn ${ROLE_ARN} \
+      --role-session-name "Ship-Devops-${CI_PIPELINE_ID}-${CI_JOB_ID}-Session" \
+      --web-identity-token ${GITLAB_OIDC_TOKEN} \
+      --duration-seconds 3600 \
+      --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' \
+      --output text))
+      export AWS_ACCESS_KEY_ID="${STS[0]}"
+      export AWS_SECRET_ACCESS_KEY="${STS[1]}"
+      export AWS_SESSION_TOKEN="${STS[2]}"
+  after_script:
+    - unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
 .terraform_template:
   extends:
@@ -108,7 +67,7 @@ deploy-k8s-service:
     ROLE_ARN: ${OPEN_ID_ROLE_ARN}
   before_script:
     - echo $READ_TOKEN > ~/.terraformrc 
-    - .invoke-awscli-commands-with-assumerole, before_script
+    - !reference [.invoke-awscli-commands-with-assumerole, before_script]
     - LOCATION=$(echo ${CI_JOB_NAME} | cut -d":" -f3)
     - cd terraform/${LOCATION}
     - pwd
@@ -117,7 +76,7 @@ deploy-k8s-service:
     - terraform output -json
 
   after_script:
-    - .invoke-awscli-commands-with-assumerole, after_script
+    - !reference [.invoke-awscli-commands-with-assumerole, after_script]
     - rm ~/.terraformrc
 
 .terraform_plan_template:
@@ -171,13 +130,13 @@ dev:terraform-pre-plan:vpc:
     paths:
     - terraform/vpc/dev-tfplan*
     expire_in: 20 minutes
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "main"'
-      changes:
-        paths:
-          - terraform/vpc/*
-        compare_to: 'refs/heads/main'
-      allow_failure: true
+  # rules:
+  #   - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "main"'
+  #     changes:
+  #       paths:
+  #         - terraform/vpc/*
+  #       compare_to: 'refs/heads/main'
+  #     allow_failure: true
 
 dev:terraform-plan:vpc:
   stage: build
@@ -191,10 +150,8 @@ dev:terraform-plan:vpc:
     - terraform/vpc/dev-tfplan*
     expire_in: 20 minutes
   only:
-    refs:
-      - merge_requests
     changes:
-      - terraform/vpc/*
+    - terraform/vpc/*
 
 dev:terraform-plan:vpc:checkov-scan:
   stage: scan
@@ -206,10 +163,8 @@ dev:terraform-plan:vpc:checkov-scan:
   - job: dev:terraform-plan:vpc
     artifacts: true
   only:
-    refs:
-      - merge_requests
-    changes:
-      - terraform/vpc/*
+   changes:
+    - terraform/vpc/*
 
 dev:terraform-apply:vpc:
   stage: deploy
@@ -224,11 +179,8 @@ dev:terraform-apply:vpc:
   - job: dev:terraform-plan:vpc:checkov-scan
   when: manual
   only:
-    refs:
-      - merge_requests
-    changes:
+      changes:
       - terraform/vpc/*
-
 
 #----eks-cluster
 dev:terraform-pre-plan:eks-cluster:
@@ -242,13 +194,17 @@ dev:terraform-pre-plan:eks-cluster:
     paths:
     - terraform/eks-cluster/dev-tfplan*
     expire_in: 20 minutes
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "main"'
-      changes:
-        paths:
-          - terraform/eks-cluster/*
-        compare_to: 'refs/heads/main'
-      allow_failure: true
+  only:
+    changes:
+      - terraform/eks-cluster/*
+
+  # rules:
+  #   - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "main"'
+  #     changes:
+  #       paths:
+  #         - terraform/eks-cluster/*
+  #       compare_to: 'refs/heads/main'
+  #     allow_failure: true
 
 dev:terraform-plan:eks-cluster:
   stage: build
@@ -262,8 +218,6 @@ dev:terraform-plan:eks-cluster:
     - terraform/eks-cluster/dev-tfplan*
     expire_in: 20 minutes
   only:
-    refs:
-      - merge_requests
     changes:
       - terraform/eks-cluster/*
 
@@ -277,8 +231,6 @@ dev:terraform-plan:eks-cluster:checkov-scan:
   - job: dev:terraform-plan:eks-cluster
     artifacts: true
   only:
-    refs:
-      - merge_requests
     changes:
       - terraform/eks-cluster/*
 
@@ -295,74 +247,5 @@ dev:terraform-apply:eks-cluster:
   - job: dev:terraform-plan:eks-cluster:checkov-scan
   when: manual
   only:
-    refs:
-      - merge_requests
     changes:
       - terraform/eks-cluster/*
-
-# #----redis-elasticcache
-# dev:terraform-pre-plan:redis-elasticcache:
-#   extends: .terraform_plan_template
-#   variables:
-#     environment_var: dev
-#     OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
-#   environment: dev
-#   artifacts:
-#     paths:
-#     - terraform/redis-elasticcache/dev-tfplan*
-#     expire_in: 20 minutes
-#   rules:
-#     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "master"'
-#       changes:
-#         paths:
-#           - terraform/redis-elasticcache/*
-#         compare_to: 'refs/heads/master'
-#       allow_failure: true
-
-# dev:terraform-plan:redis-elasticcache:
-#   extends: .terraform_plan_template
-#   variables:
-#     environment_var: dev
-#     OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
-#   environment: dev
-#   artifacts:
-#     paths:
-#     - terraform/redis-elasticcache/dev-tfplan*
-#     expire_in: 20 minutes
-#   only:
-#     refs:
-#       - merge_requests
-#     changes:
-#       - terraform/redis-elasticcache/*
-
-# dev:terraform-plan:redis-elasticcache:checkov-scan:
-#   extends: .checkov-scan-template
-#   variables:
-#     environment_var: dev
-#     OPTS: "-f $environment_var-tfplan.json --check $CHECKOV_IDS --skip-check CKV2_AWS_11,CKV2_AWS_12"
-#   needs:
-#   - job: dev:terraform-plan:redis-elasticcache
-#     artifacts: true
-#   only:
-#     refs:
-#       - merge_requests
-#     changes:
-#       - terraform/redis-elasticcache/*
-
-# dev:terraform-apply:redis-elasticcache:
-#   extends: .terraform_apply_template
-#   variables:
-#     environment_var: dev
-#     OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
-#   environment: dev
-#   needs:
-#   - job: dev:terraform-plan:redis-elasticcache
-#     artifacts: true
-#   - job: dev:terraform-plan:redis-elasticcache:checkov-scan
-#   when: manual
-#   only:
-#     refs:
-#       - merge_requests
-#     changes:
-#       - terraform/redis-elasticcache/*
-
