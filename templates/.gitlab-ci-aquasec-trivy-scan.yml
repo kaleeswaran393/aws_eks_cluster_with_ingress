@@ -24,10 +24,10 @@ variables:
   image:
     name: $NEXUSREPO_DOCKER_PROXY_HOSTNAME/aquasec/trivy:$TRIVY_VERSION
     entrypoint: [""]
-  tags:
-    - non_privileged
-    - no_root
-    - cstack
+  # tags:
+  #   - non_privileged
+  #   - no_root
+  #   - cstack
   script:
     - export VARIABLE_NAME=SCAN_TARGET
     - !reference [.check-variable-sh, script]
