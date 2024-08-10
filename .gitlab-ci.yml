@@ -11,6 +11,8 @@ stages:
   - .pre
   - build
   - scan
+  - validate
+  - fmt
   - deploy
   - terraform plan
   - checkov scan
@@ -44,12 +46,10 @@ stages:
 #   - unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
 fmt:
-  stage: .pre
   extends: .terraform:fmt
   needs: []
 
 validate:
-  stage: build
   extends: .terraform:validate
   needs: []
 
