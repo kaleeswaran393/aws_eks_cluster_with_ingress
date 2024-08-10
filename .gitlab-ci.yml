@@ -44,19 +44,22 @@ stages:
 #   - unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
 fmt:
- extends: .terraform:fmt
- needs: []
+  stage: .pre
+  extends: .terraform:fmt
+  needs: []
 
 validate:
- extends: .terraform:validate
- needs: []
+  stage: build
+  extends: .terraform:validate
+  needs: []
 
 build:
- extends: .terraform:build
+  stage: build
+  extends: .terraform:build
 
 deploy:
- extends: .terraform:deploy
- dependencies:
-   - build
- environment:
-   name: $TF_STATE_NAME
+  extends: .terraform:deploy
+  dependencies:
+    - build
+  environment:
+    name: $TF_STATE_NAME
