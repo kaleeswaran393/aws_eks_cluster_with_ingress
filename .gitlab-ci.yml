@@ -17,6 +17,8 @@ stages:
   - terraform plan
   - checkov scan
   - terraform apply
+  - test
+  - cleanup
 
 
 # variables:
