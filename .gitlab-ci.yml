@@ -4,7 +4,7 @@ include:
   # - local: '/templates/.gitlab-ci-aws.yml'
   # - local: '/templates/.gitlab-ci-docker-build.yml'
   # - local: '/templates/.gitlab-ci-checkov-scan.yml'
- # - template: Jobs/SAST-IaC.gitlab-ci.yml
+  - template: Jobs/SAST-IaC.gitlab-ci.yml
   - template: Terraform.latest.gitlab-ci.yml
 
 stages:
