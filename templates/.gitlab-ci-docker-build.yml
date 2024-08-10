@@ -22,8 +22,8 @@ include:
   image: 
     name: $PIPELINE_COE_REGISTRY/kaniko-container:latest
     entrypoint: [""]
-  tags: 
-    - ship_docker
+  # tags: 
+  #   - ship_docker
   variables:
     DOCKERFILE_PATH: "./"
     DOCKERFILE_NAME: "Dockerfile"
@@ -57,8 +57,8 @@ include:
   image: 
     name: $PIPELINE_COE_REGISTRY/kaniko-container:latest
     entrypoint: [""]
-  tags: 
-    - ship_docker
+  # tags: 
+  #   - ship_docker
   variables:
     DOCKERFILE_PATH: "./"
     DOCKERFILE_NAME: "Dockerfile"

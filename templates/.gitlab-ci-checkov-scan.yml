@@ -4,10 +4,10 @@
     entrypoint:
       - '/usr/bin/env'
       - 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
-  tags:
-    - non_privileged
-    - no_root
-    - cstack
+  # tags:
+  #   - non_privileged
+  #   - no_root
+  #   - cstack
   variables:
     OPTS: "-d $WORKING_DIR --check $CHECKOV_IDS"
     WORKING_DIR: "."

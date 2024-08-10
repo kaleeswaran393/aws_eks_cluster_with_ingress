@@ -17,10 +17,10 @@ include:
 .push-docker-image-to-private-registry:
   image:
     name: $PIPELINE_COE_REGISTRY/crane-container:latest
-  tags:
-    - non_privileged
-    - no_root
-    - cstack
+  # tags:
+  #   - non_privileged
+  #   - no_root
+  #   - cstack
   before_script:
     - export VARIABLE_NAME=DOCKER_TARGET_REGISTRY
     - !reference [.check-variable-sh, script]
