@@ -32,7 +32,7 @@
 #   - test
 #   - cleanup
 
-image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
+image: amazon/aws-cli:2.11.18
 variables:
   TF_ROOT: ${CI_PROJECT_DIR}
   TF_ADDRESS: ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/terraform/state/${CI_PROJECT_NAME}
@@ -46,7 +46,7 @@ before_script:
   
   - cd vpc
   #- #/bin/sh
-  - yum install pip3
+  -  install pip3
   - wget https://s3.amazonaws.com/aws-cli/awscli-bundle.zip
   - unzip awscli-bundle.zip
   - ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
@@ -64,6 +64,7 @@ stages:
   - deploy
 
 init:
+  image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
   stage: prepare
   variables:
     ROLE_ARN: ${ROLE_ARN}
@@ -72,6 +73,7 @@ init:
     - gitlab-terraform init -backend-config="$environment_var"-backend.tfvars -reconfigure
 
 validate:
+  image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
   stage: validate
   variables:
     ROLE_ARN: ${ROLE_ARN}
