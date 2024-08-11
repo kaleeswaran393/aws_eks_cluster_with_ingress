@@ -1,3 +1,9 @@
+image:
+name: hashicorp/terraform:light
+entrypoint:
+- ‘/usr/bin/env’
+- ‘PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin’  AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}’
+
 include:
   # - local: "/templates/.gitlab-ci-aquasec-trivy-scan.yml"
   # - local: "/templates/vars/.gitlab-ci-pipeline-coe-vars.yml"
@@ -19,6 +25,36 @@ stages:
   - terraform apply
   - test
   - cleanup
+
+
+cache:
+paths:
+- .terraform
+key: “$CI_BUILD_REPO”
+
+plan:
+stage: terraform plan
+variables:
+    environment_var: dev
+    OPEN_ID_ROLE_ARN : ${OPEN_ID_ROLE_ARN}
+script:
+- terraform plan -var-file="$environment_var".tfvars -out="$environment_var"-tfplan
+- terraform show -json $environment_var-tfplan | jq '.' > $environment_var-tfplan.json
+when: always
+artifacts:
+paths:
+- "$environment_var"-tfplan
+
+apply:
+stage: apply
+script:
+- terraform init -backend-config="$environment_var"-backend.tfvars -reconfigure
+- terraform workspace select "$environment_var"
+- terraform output -json
+- terraform apply
+when: manual
+dependencies:
+- plan
 
 
 # variables:
