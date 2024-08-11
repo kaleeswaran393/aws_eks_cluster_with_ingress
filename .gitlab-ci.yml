@@ -15,12 +15,9 @@ cache:
     - .terraform
 
 before_script:
-  variables:
-    ROLE_ARN: ${ROLE_ARN}
-    environment_var: test
   - terraform --version
   - cd eks-cluster
-  - terraform init -backend-config=$environment_var-backend.tfvars -reconfigure
+  - terraform init -backend-config=test-backend.tfvars -reconfigure
   - terraform workspace new $environment_var
 
 stages:
@@ -48,19 +45,6 @@ plan:
     name: plan
     paths:
       - ${TF_ROOT}/plan.cache
-    - echo \`\`\`diff > plan.txt
-    - terraform show -no-color ${PLAN} | tee -a plan.txt
-    - echo \`\`\` >> plan.txt
-    - sed -i -e 's/  +/+/g' plan.txt
-    - sed -i -e 's/  ~/~/g' plan.txt
-    - sed -i -e 's/  -/-/g' plan.txt
-    - MESSAGE=$(cat plan.txt)
-    - >-
-      curl -X POST -g -H "PRIVATE-TOKEN: ${GITLAB_ACCESS_TOKEN}" 
-      --data-urlencode "body=${MESSAGE}" 
-      "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}/discussions"
- 
-
 
 build:
   stage: plan
