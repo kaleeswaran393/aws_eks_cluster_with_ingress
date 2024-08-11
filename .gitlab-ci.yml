@@ -41,22 +41,22 @@ pre-plan:
     - terraform init -backend-config="$environment_var"-backend.tfvars -reconfigure
     - terraform workspace select "$environment_var"
     - terraform output -json
-terraform plan:
-  stage: terraform plan
-  variables:
-     ROLE_ARN: ${ROLE_ARN}
-     environment_var: test
-  script:
-    - pwd
-    - terraform plan -var-file="$environment_var".tfvars -out="$environment_var"-tfplan
-    - terraform show -json $environment_var-tfplan | jq '.' > $environment_var-tfplan.json
-  artifacts:
-      paths:
-      - vpc/dev-tfplan*
-      expire_in: 20 minutes
-    only:
-      changes:
-      - vpc/*
+# terraform plan:
+#   stage: terraform plan
+#   variables:
+#      ROLE_ARN: ${ROLE_ARN}
+#      environment_var: test
+#   script:
+#     - pwd
+#     - terraform plan -var-file="$environment_var".tfvars -out="$environment_var"-tfplan
+#     - terraform show -json $environment_var-tfplan | jq '.' > $environment_var-tfplan.json
+#   artifacts:
+#       paths:
+#       - vpc/dev-tfplan*
+#       expire_in: 20 minutes
+#     only:
+#       changes:
+#       - vpc/*
 # image:
 # name: hashicorp/terraform:light
 # entrypoint:
