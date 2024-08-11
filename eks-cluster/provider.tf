@@ -1,6 +1,5 @@
 provider "aws" {
     profile = var.profile
-    region  = var.region
-    token      = "terraform"
-    
+    region  = "ap-southeast-1"
+    token      = "terraform"    
 }

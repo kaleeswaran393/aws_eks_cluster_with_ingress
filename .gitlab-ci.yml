@@ -17,6 +17,8 @@ cache:
 before_script:
   - terraform --version
   - cd eks-cluster
+  - pwd
+  - echo $AWS_ACCESS_KEY_ID
   - terraform init -backend-config=test-backend.tfvars -reconfigure
   - terraform workspace new $environment_var
 
