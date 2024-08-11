@@ -6,11 +6,11 @@ include:
   - local: '/templates/.gitlab-ci-checkov-scan.yml'
   - template: Jobs/SAST-IaC.gitlab-ci.yml
   - template: Terraform.latest.gitlab-ci.yml
-
-image:
-  name: aws-cli:latest
-  entrypoint:
-    - '/usr/bin/env'
+default:
+  image:
+    name: aws-cli:latest
+    entrypoint:
+      - '/usr/bin/env'
 
 stages:
   - .pre
