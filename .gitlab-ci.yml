@@ -21,11 +21,11 @@ stages:
   - test
   - cleanup
 
-image:
-name: hashicorp/terraform:light
-entrypoint:
-- '/usr/bin/env'
-- 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}'
+# image:
+# name: hashicorp/terraform:light
+# entrypoint:
+# - '/usr/bin/env'
+# - 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}'
 
 # cache:
 # paths:
@@ -85,16 +85,13 @@ after_script:
 
 .invoke-awscli-commands-with-assumerole:
   image:
-    name: $NEXUSREPO_DOCKER_PROXY_HOSTNAME/amazon/aws-cli:latest
+    name: aws-cli:latest
     entrypoint:
       - '/usr/bin/env'
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: https://$CI_SERVER_HOST
-  tags:
-    - non_privileged
-    - no_root
-    - cstack
+
   before_script:
     - export VARIABLE_NAME=ROLE_ARN
     - !reference [.check-variable-sh, script]
@@ -146,30 +143,3 @@ after_script:
   script:
     - pwd
     - terraform apply "$environment_var"-tfplan
-
-
-fmt:
-  extends: .terraform:fmt
-  needs: []
-
-validate:
-  extends: .terraform:validate
-  needs: []
-
-build:
-  stage: build
-  extends: .terraform:build
-
-deploy:
-  extends: .terraform:deploy
-  dependencies:
-    - build
-  environment:
-    name: $TF_STATE_NAME
-cleanup:
- extends: .terraform:destroy
- environment:
-   name: $TF_STATE_NAME
- rules:
-   - if: $CI_COMMIT_TITLE == "destroy"
-     when: on_success
