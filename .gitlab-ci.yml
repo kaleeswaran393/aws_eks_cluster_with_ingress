@@ -43,7 +43,14 @@ cache:
     - ${TF_ROOT}/.terraform
 
 before_script:
+  
   - cd vpc
+  - #/bin/sh
+  - wget https://s3.amazonaws.com/aws-cli/awscli-bundle.zip
+  - unzip awscli-bundle.zip
+  - sudo ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
+  - ./awscli-bundle/install -b ~/bin/aws
+  - ./awscli-bundle/install -h
   - creds=$(aws sts assume-role --role-arn ${ROLE_ARN} --role-session-name tf-pipeline | jq -r '.Credentials')
   - export AWS_ACCESS_KEY_ID=$(echo $creds | jq -r '.AccessKeyId')
   - export AWS_SECRET_ACCESS_KEY=$(echo $creds | jq -r '.SecretAccessKey')
