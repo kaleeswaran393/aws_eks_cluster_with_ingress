@@ -21,6 +21,42 @@ stages:
   - test
   - cleanup
 
+ before_script:
+    - >
+      export $(printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s"
+      $(aws sts assume-role-with-web-identity
+      --role-arn ${ROLE_ARN}
+      --role-session-name "GitLabRunner-${CI_PROJECT_ID}-${CI_PIPELINE_ID}"
+      --web-identity-token $CI_JOB_JWT_V2
+      --duration-seconds 3600
+      --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]'
+      --output text))
+    - aws sts get-caller-identity
+script:
+  stage: .pre
+  variables:
+     ROLE_ARN: ${ROLE_ARN}
+     environment_var: test
+  - cd vpc
+  - terraform init -backend-config="$environment_var"-backend.tfvars -reconfigure
+  - terraform workspace select "$environment_var"
+  - terraform output -json
+terraform plan:
+  stage: terraform plan
+  variables:
+     ROLE_ARN: ${ROLE_ARN}
+     environment_var: test
+  script:
+    - pwd
+    - terraform plan -var-file="$environment_var".tfvars -out="$environment_var"-tfplan
+    - terraform show -json $environment_var-tfplan | jq '.' > $environment_var-tfplan.json
+  artifacts:
+      paths:
+      - vpc/dev-tfplan*
+      expire_in: 20 minutes
+    only:
+      changes:
+      - vpc/*
 # image:
 # name: hashicorp/terraform:light
 # entrypoint:
