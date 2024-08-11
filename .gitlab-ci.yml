@@ -67,15 +67,7 @@ variables:
   DOCKER_TARGET_IMAGE: $IMAGE_NAME:$IMAGE_VERSION
   SBOM_FILE: trivy.cdx.json
 
-before_script:
-  - export VARIABLE_NAME=ROLE_ARN
-  - |
-    STS=($(aws sts assume-role-with-web-identity --role-arn ${ROLE_ARN} --role-session-name "Ship-Devops-${CI_PIPELINE_ID}-${CI_JOB_ID}-Session" --web-identity-token ${GITLAB_OIDC_TOKEN} --duration-seconds 3600 --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' --output text))
-    export AWS_ACCESS_KEY_ID="${STS[0]}"
-    export AWS_SECRET_ACCESS_KEY="${STS[1]}"
-    export AWS_SESSION_TOKEN="${STS[2]}"
-after_script:
-  - unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
 
 .invoke-awscli-commands-with-assumerole:
   image:
@@ -106,7 +98,6 @@ after_script:
 .terraform_template:
   extends:
     - .invoke-awscli-commands-with-assumerole
-  image: registry.${CI_SERVER_HOST}/wog/gvt/ship/ship-2/ship2-infra/common/docker:latest
   variables:
     ROLE_ARN: ${OPEN_ID_ROLE_ARN}
   before_script:
