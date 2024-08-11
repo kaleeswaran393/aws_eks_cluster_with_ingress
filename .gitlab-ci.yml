@@ -7,6 +7,11 @@ include:
   - template: Jobs/SAST-IaC.gitlab-ci.yml
   - template: Terraform.latest.gitlab-ci.yml
 
+image:
+  name: aws-cli:latest
+  entrypoint:
+    - '/usr/bin/env'
+
 stages:
   - .pre
   - build
@@ -21,6 +26,7 @@ stages:
   - cleanup
 
 before_script:
+ 
   - >
     export $(printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s"
     $(aws sts assume-role-with-web-identity
