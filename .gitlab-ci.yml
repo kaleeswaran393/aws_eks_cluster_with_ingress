@@ -50,8 +50,7 @@ plan:
     name: plan
     paths:
       - $PLAN
-  only:
-    - merge_requests
+
 
 build:
   stage: plan
@@ -61,8 +60,6 @@ build:
     name: plan
     paths:
       - $PLAN
-  only:
-    - master
 
 apply:
   stage: apply
@@ -71,8 +68,6 @@ apply:
   dependencies:
     - build
   when: manual
-  only:
-    - master
 
 destroy:
   stage: destroy
@@ -82,6 +77,4 @@ destroy:
   dependencies:
     - apply  
   when: manual
-  only:
-    refs:
-      - master
+   
