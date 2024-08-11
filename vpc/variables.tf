@@ -1,4 +1,4 @@
-variable "PROFILE" {
+variable "profile" {
   default = ""
 }
 
