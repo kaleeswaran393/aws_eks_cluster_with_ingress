@@ -52,11 +52,11 @@ stages:
       export AWS_SESSION_TOKEN="${STS[2]}"
   after_script:
     - unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-    
+
 before_script:
-  id_tokens:
-  GITLAB_OIDC_TOKEN:
-    aud: https://$CI_SERVER_HOST
+id_tokens:
+GITLAB_OIDC_TOKEN:
+  aud: https://$CI_SERVER_HOST
   - >
     export $(printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s"
     $(aws sts assume-role-with-web-identity
