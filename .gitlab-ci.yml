@@ -1,36 +1,107 @@
-include:
-  - local: "/templates/.gitlab-ci-aquasec-trivy-scan.yml"
-  - local: "/templates/vars/.gitlab-ci-pipeline-coe-vars.yml"
-  - local: '/templates/.gitlab-ci-aws.yml'
-  - local: '/templates/.gitlab-ci-docker-build.yml'
-  - local: '/templates/.gitlab-ci-checkov-scan.yml'
-  - template: Jobs/SAST-IaC.gitlab-ci.yml
-  - template: Terraform.latest.gitlab-ci.yml
-default:
-  # image:
-  #   name: amazon/aws-cli:2.11.18
-  #   entrypoint: ["/bin/sh", "-c"]
-  image:
-    name: hashicorp/terraform:light
-    entrypoint:
-      - '/usr/bin/env'
-      - 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
-      - 'AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}' 
-      - 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}' 
-      - 'AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}'
+# include:
+#   - local: "/templates/.gitlab-ci-aquasec-trivy-scan.yml"
+#   - local: "/templates/vars/.gitlab-ci-pipeline-coe-vars.yml"
+#   - local: '/templates/.gitlab-ci-aws.yml'
+#   - local: '/templates/.gitlab-ci-docker-build.yml'
+#   - local: '/templates/.gitlab-ci-checkov-scan.yml'
+#   - template: Jobs/SAST-IaC.gitlab-ci.yml
+#   - template: Terraform.latest.gitlab-ci.yml
+# default:
+#   # image:
+#   #   name: amazon/aws-cli:2.11.18
+#   #   entrypoint: ["/bin/sh", "-c"]
+#   image:
+#     name: hashicorp/terraform:light
+#     entrypoint:
+#       - '/usr/bin/env'
+#       - 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+#       - 'AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}' 
+#       - 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}' 
+#       - 'AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}'
+
+# stages:
+#   - .pre
+#   - build
+#   - scan
+#   - validate
+#   - fmt
+#   - deploy
+#   - terraform plan
+#   - checkov scan
+#   - terraform apply
+#   - test
+#   - cleanup
+
+image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
+variables:
+  TF_ROOT: ${CI_PROJECT_DIR}
+  TF_ADDRESS: ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/terraform/state/${CI_PROJECT_NAME}
+
+cache:
+  key: example-production
+  paths:
+    - ${TF_ROOT}/.terraform
+
+before_script:
+  - cd vpc
 
 stages:
-  - .pre
-  - build
-  - scan
+  - prepare
   - validate
-  - fmt
+  - build
   - deploy
-  - terraform plan
-  - checkov scan
-  - terraform apply
-  - test
-  - cleanup
+
+init:
+  stage: prepare
+  variables:
+    ROLE_ARN: ${ROLE_ARN}
+    environment_var: test
+  script:
+    - gitlab-terraform init
+
+validate:
+  stage: validate
+  variables:
+    ROLE_ARN: ${ROLE_ARN}
+    environment_var: test
+  script:
+    - gitlab-terraform init
+    - gitlab-terraform validate
+
+    - terraform init -backend-config="$environment_var"-backend.tfvars -reconfigure
+    - terraform workspace select "$environment_var"
+    - terraform output -json
+
+plan:
+  stage: build
+  variables:
+    ROLE_ARN: ${ROLE_ARN}
+    environment_var: test
+  script:
+    - terraform plan -var-file="$environment_var".tfvars -out="$environment_var"-tfplan
+    - terraform show -json $environment_var-tfplan | jq '.' > $environment_var-tfplan.json
+  artifacts:
+    name: plan
+    paths:
+      - ${TF_ROOT}/plan.cache
+    reports:
+      terraform: ${TF_ROOT}/plan.json
+
+# Separate apply job for manual launching Terraform as it can be destructive
+# action.
+apply:
+  stage: deploy
+  environment:
+    name: production
+  script:
+    - gitlab-terraform apply
+  dependencies:
+    - plan
+  when: manual
+  only:
+    - master
+
+
 
 
 # build:
