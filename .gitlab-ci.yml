@@ -57,7 +57,7 @@ init:
     ROLE_ARN: ${ROLE_ARN}
     environment_var: test
   script:
-    - gitlab-terraform init
+    - gitlab-terraform init -backend-config="$environment_var"-backend.tfvars -reconfigure
 
 validate:
   stage: validate
