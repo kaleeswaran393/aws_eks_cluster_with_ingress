@@ -34,7 +34,7 @@ resource "aws_security_group" "eks-sg" {
 
   provider "kubernetes" {
   host                   = module.eks.cluster_endpoint
-  #cluster_ca_certificate = base64decode(local.CA_CERTIFICATE_FILE_PATH)
+  cluster_ca_certificate = local.CA_CERTIFICATE_FILE_PATH
   exec {
     api_version = "client.authentication.k8s.io/v1"
     args        = ["eks", "get-token", "--cluster-name", local.cluster_name]
