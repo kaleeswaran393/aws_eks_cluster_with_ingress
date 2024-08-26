@@ -9,8 +9,20 @@ const client = redis.createClient({
     port: process.env.REDIS_PORT || 6379           // Use environment variable or fallback to 6379
 });
 
+
 // Initialize Redis key
 client.set('visits', 0);
+
+//Restrict default endpoint
+app.use((req, res, next) => {
+    if (req.path === '/') {
+      res.status(403).send('Forbidden');
+    } else {
+      next();
+    }
+  });
+
+
 
 // Define the route
 app.all('/count', (req, res) => {
