@@ -24,8 +24,8 @@ app.use((req, res, next) => {
 
 
 
-// Define the route
-app.all('/count', (req, res) => {
+// Define the accessible route
+app.get('/count', (req, res) => {
     client.get('visits', (err, visits) => {
         if (err) {
             res.status(500).send('Error retrieving visits');
