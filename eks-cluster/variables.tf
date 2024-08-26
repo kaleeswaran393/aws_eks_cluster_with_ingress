@@ -14,12 +14,12 @@ variable "region" {
 # }
 
 variable "vpc_id" {
-  description = "ID of the VPC where the Redis ElastiCache will be deployed."
+  description = "ID of the VPC where the eks will be deployed."
   type        = string
 }
 
 variable "subnet_ids" {
-  description = "List of subnet IDs where the Redis ElastiCache will be deployed."
+  description = "List of subnet IDs where the eks will be deployed."
   type        = list(string)
 }
 
@@ -34,8 +34,11 @@ variable "profile" {
   default = "dev"
 }
 
-
 variable "state_bucket" {
   description = "The name of the resource."
+  type        = string
+}
+variable "cluster_name" {
+  description = "The name of the cluster."
   type        = string
 }

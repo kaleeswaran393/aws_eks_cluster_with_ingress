@@ -1,5 +1,5 @@
 locals {
-  cluster_name = "dev-eks-test"
+  #cluster_name = "dev-eks-test"
   CA_CERTIFICATE_DIRECTORY="/etc/kubernetes/pki"
   CA_CERTIFICATE_FILE_PATH="${local.CA_CERTIFICATE_DIRECTORY}/ca.crt"
  
@@ -28,7 +28,7 @@ resource "aws_security_group" "eks-sg" {
 
     tags = merge({
       Name = "EKS ${var.environment}",
-      "kubernetes.io/cluster/${local.cluster_name}": "owned"
+      "kubernetes.io/cluster/${var.cluster_name}": "owned"
     })
   }
 
@@ -37,7 +37,7 @@ resource "aws_security_group" "eks-sg" {
   cluster_ca_certificate = local.CA_CERTIFICATE_FILE_PATH
   exec {
     api_version = "client.authentication.k8s.io/v1"
-    args        = ["eks", "get-token", "--cluster-name", local.cluster_name]
+    args        = ["eks", "get-token", "--cluster-name", var.cluster_name]
     command     = "aws"
   }
 }
@@ -45,7 +45,7 @@ module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "20.8.5"
 
-  cluster_name    = local.cluster_name
+  cluster_name    = var.cluster_name
   cluster_version = "1.29"
 
   cluster_endpoint_public_access           = true
@@ -127,7 +127,7 @@ provider "helm" {
     cluster_ca_certificate = local.CA_CERTIFICATE_FILE_PATH
     exec {
       api_version = "client.authentication.k8s.io/v1"
-      args        = ["eks", "get-token", "--cluster-name", local.cluster_name]
+      args        = ["eks", "get-token", "--cluster-name", var.cluster_name]
       command     = "aws"
     }
   }
@@ -179,7 +179,7 @@ resource "helm_release" "lb" {
 
   set {
     name  = "clusterName"
-    value = var.eks_name
+    value = var.cluster_name
   }
 }
 
