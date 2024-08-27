@@ -1,4 +1,4 @@
-sname: Trigger GitLab Pipeline
+name: Trigger GitLab Pipeline
 
 on:
   push:
