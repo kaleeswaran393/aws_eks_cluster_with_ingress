@@ -1,2 +1,0 @@
-variables:
-  PIPELINE_COE_REGISTRY: "$CI_REGISTRY/innersource/projects/sgts-pipelinecoe/containers"

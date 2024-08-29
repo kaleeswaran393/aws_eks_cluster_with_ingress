@@ -1,0 +1,18 @@
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-nginxapp1
+  labels:
+    app: web-app
+  annotations:
+    # Load Balancer Name
+    alb.ingress.kubernetes.io/load-balancer-name: app1ingress
+    alb.ingress.kubernetes.io/scheme: internet-facing
+spec:
+  ingressClassName: ingres-class # Ingress Class
+  defaultBackend:
+    service:
+      name: web-app-service
+      port:
+        number: 8081
