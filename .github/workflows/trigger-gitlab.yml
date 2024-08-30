@@ -13,7 +13,8 @@ jobs:
       - name: Trigger GitLab Pipeline
         env:
         
-          GITLAB_TOKEN: "glptt-1a297add24395696fb14aa5222e6be1c31672420"
+          #GITLAB_TOKEN: "glptt-1a297add24395696fb14aa5222e6be1c31672420"
+          GITLAB_TOKEN:  ${{ secrets.GITLAB_TOKEN }}
           GITLAB_PROJECT_ID: 45456
          
         run: |
