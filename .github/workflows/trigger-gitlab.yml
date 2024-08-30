@@ -13,13 +13,15 @@ jobs:
       - name: Trigger GitLab Pipeline
         env:
           GITLAB_TOKEN:  ${{ secrets.GITLAB_TOKEN }}
+          SGTS_GITLAB_TOKEN:  ${{ secrets.SGTS_GITLAB_TOKEN }}
           GITLAB_PROJECT_ID: 60742744
+          SGTS_GITLAB_PROJECT_ID: 45456
          
         run: |
           curl --request POST \
-            --form "token=$GITLAB_TOKEN" \
+            --form "token=$SGTS_GITLAB_TOKEN" \
             --form "ref=main" \
             --form "variables[BUILD_TRIGGER]=true" \
             --form "variables[PIPELINE_TYPE]=infra" \
             --form "variables[TASK_DIR]=redis-elasticcache" \
-            "https://gitlab.com/api/v4/projects/$GITLAB_PROJECT_ID/trigger/pipeline"
+            "https://gitlab.com/api/v4/projects/$SGTS_GITLAB_PROJECT_ID/trigger/pipeline"
