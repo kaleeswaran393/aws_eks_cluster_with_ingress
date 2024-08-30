@@ -12,10 +12,10 @@ jobs:
     steps:
       - name: Trigger GitLab Pipeline
         env:
-          #GITLAB_TOKEN: "glptt-7f9a684cecd622bb5a9705efaa5e386851b3805a"
+        
           GITLAB_TOKEN: "glptt-1a297add24395696fb14aa5222e6be1c31672420"
           GITLAB_PROJECT_ID: 45456
-          #GITLAB_PROJECT_ID: 60742744
+         
         run: |
           curl --request POST \
             --form "token=$GITLAB_TOKEN" \
