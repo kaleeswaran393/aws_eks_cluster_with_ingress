@@ -28,6 +28,7 @@ variable "ipv4_private_cidrs" {
 variable "retention_days" {
   description = "Cloud Watch Log Group retention days"
   type        = number
+  default = 7
 }
 
 variable "OPEN_ID_ROLE_ARN" {
