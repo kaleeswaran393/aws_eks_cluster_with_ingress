@@ -26,12 +26,12 @@ variable "subnet_ids" {
 variable "environment" {
   description = "The environment name."
   type        = string
-  default = "dev"
+  default = "test"
 }
 variable "profile" {
   description = "The profile name."
   type        = string
-  default = "dev"
+  default = "test"
 }
 
 
