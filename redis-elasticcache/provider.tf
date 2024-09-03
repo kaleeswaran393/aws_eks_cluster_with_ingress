@@ -2,6 +2,7 @@ provider "aws" {
     profile = var.profile
     region  = var.region
     token      = "terraform"   
+    shared_credentials_files = ["~/.aws/credentials"]
 
 }
 terraform {
