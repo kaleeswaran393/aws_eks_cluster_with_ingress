@@ -2,8 +2,8 @@ module "isolated_vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "5.8.1"
   name = "${local.name}_vpc"
-  #cidr = var.vpc_cidr
-  cidr = element([var.vpc_cidr],0)
+  cidr = var.vpc_cidr
+  #cidr = element([var.vpc_cidr],0)
   azs = ["${local.region}a", "${local.region}b", "${local.region}c"]
   private_subnets = var.ipv4_private_cidrs
   public_subnets  = var.ipv4_public_cidrs

@@ -10,8 +10,8 @@ variable "prefix_name" {
 
 variable "vpc_cidr" {
   description = "vpc cidr"
-  type        = list(any)
-  default     = []
+  type        = string
+  default     = ""
 }
 
 variable "ipv4_public_cidrs" {
