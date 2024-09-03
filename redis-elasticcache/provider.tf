@@ -1,6 +1,8 @@
 provider "aws" {
     profile = var.profile
     region  = var.region
+    token      = "terraform"   
+
 }
 terraform {
   required_version = ">= 1.3.2"
