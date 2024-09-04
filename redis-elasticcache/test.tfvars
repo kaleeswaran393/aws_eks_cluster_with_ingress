@@ -1,7 +1,5 @@
-
-OPEN_ID_ROLE_ARN = "arn:aws:iam::170257681718:role/gitlab-oidc-role"
+ROLE_ARN = "arn:aws:iam::170257681718:role/gitlab-oidc-role"
 app_name = "test-redis-cluster"
-vpc_cidr = "100.118.108.0/22"
 profile = "test"
 vpc_id = "vpc-076943a4c53727f9c"
 state_bucket = "test1-terraform-backend"
