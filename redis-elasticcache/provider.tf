@@ -1,9 +1,11 @@
 provider "aws" {
-    #profile = var.profile
-    region  = var.region
-    token      = "terraform"   
-    shared_credentials_files = ["~/.aws/credentials"]
-
+  #profile = var.profile
+  region = "ap-southeast-1"
+  default_tags {
+    tags = {
+      provisioned_mode = "terraform"
+    }
+  }
 }
 terraform {
   required_version = ">= 1.3.2"
