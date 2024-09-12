@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+      - dev
+      - uat
 
 jobs:
   trigger-gitlab-pipeline:
@@ -23,5 +25,6 @@ jobs:
             --form "ref=main" \
             --form "variables[BUILD_TRIGGER]=true" \
             --form "variables[PIPELINE_TYPE]=infra" \
+            --form "variables[BRANCH]=main" \
             --form "variables[TASK_DIR]=redis-elasticcache" \
             "https://gitlab.com/api/v4/projects/$GITLAB_PROJECT_ID/trigger/pipeline"
