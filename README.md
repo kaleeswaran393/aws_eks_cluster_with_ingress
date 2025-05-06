@@ -1,4 +1,4 @@
-# Berkeley Project
+# AWS EKS with Ingress
 
 This application is to deploy a docker application on the kubernetes environment which will show the number of visitors to their website.
 This application is built in AWS cloud and using Terraform to build the IaC.
